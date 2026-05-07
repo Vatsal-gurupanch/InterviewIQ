@@ -22,7 +22,7 @@ export default function Dashboard() {
             <div className="w-8 h-8 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-lg flex items-center justify-center">
               <BrainCircuit className="text-white w-5 h-5" />
             </div>
-            <span className="font-bold tracking-tight">IPC</span>
+            <span className="font-bold tracking-tight">InterviewIQ</span>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-400">Welcome back, {user?.firstName}</span>

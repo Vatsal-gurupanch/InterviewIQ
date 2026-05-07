@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FileUp, PlayCircle } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@clerk/nextjs";
@@ -16,6 +16,33 @@ export default function InterviewSetup() {
   const [role, setRole] = useState("");
   const [mode, setMode] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resumeText, setResumeText] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/interviews/upload-resume", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.text) {
+        setResumeText(data.text);
+      }
+    } catch (err) {
+      console.error("Upload error:", err);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const startSession = async () => {
     if (!role || !mode) return;
@@ -28,7 +55,7 @@ export default function InterviewSetup() {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({ role, mode, resume_text: "" }),
+        body: JSON.stringify({ role, mode, resume_text: resumeText }),
       });
       const data = await res.json();
       if (data.session_id) {
@@ -83,10 +110,24 @@ export default function InterviewSetup() {
 
           <div className="space-y-2 pt-2">
             <Label>Upload Resume (Optional)</Label>
-            <div className="border-2 border-dashed border-white/20 rounded-xl p-8 flex flex-col items-center justify-center text-center hover:bg-white/5 transition-colors cursor-pointer group">
-              <FileUp className="w-8 h-8 text-gray-500 group-hover:text-indigo-400 mb-3 transition-colors" />
-              <div className="text-sm font-medium mb-1">Click to upload PDF</div>
-              <div className="text-xs text-gray-500">The AI will use this to ask contextual questions</div>
+            <input 
+              type="file" 
+              accept=".pdf" 
+              className="hidden" 
+              ref={fileInputRef} 
+              onChange={handleFileUpload} 
+            />
+            <div 
+              className={`border-2 border-dashed border-white/20 rounded-xl p-8 flex flex-col items-center justify-center text-center transition-colors cursor-pointer group ${resumeText ? 'bg-emerald-500/10 border-emerald-500/30' : 'hover:bg-white/5'}`}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <FileUp className={`w-8 h-8 mb-3 transition-colors ${resumeText ? 'text-emerald-400' : 'text-gray-500 group-hover:text-indigo-400'}`} />
+              <div className="text-sm font-medium mb-1">
+                {uploading ? "Analyzing Resume..." : resumeText ? "Resume Analyzed Successfully!" : "Click to upload PDF"}
+              </div>
+              <div className="text-xs text-gray-500">
+                {resumeText ? "Context will be used to generate personalized questions." : "The AI will use this to ask contextual questions"}
+              </div>
             </div>
           </div>
         </CardContent>

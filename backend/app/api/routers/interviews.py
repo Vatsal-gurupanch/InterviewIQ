@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, UploadFile, File
+import fitz
 from app.api.dependencies.auth import get_current_user
 from app.services import gemini_service, nlp_service
 from app.models.session import Session
@@ -17,7 +18,13 @@ async def start_session(
     # For simplicity, we'll create the session without user linking or create a dummy user.
     # To keep it robust, we won't strictly enforce user_id link for now if not populated.
     
-    question_data = gemini_service.generate_question(role=role, mode=mode, resume_text=resume_text, history=[])
+    try:
+        question_data = gemini_service.generate_question(role=role, mode=mode, resume_text=resume_text, history=[])
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "quota" in error_msg or "429" in error_msg or "exhausted" in error_msg:
+            raise HTTPException(status_code=429, detail="API rate limit exceeded. Please try again in a minute.")
+        raise HTTPException(status_code=500, detail=f"Failed to generate question: {str(e)}")
     
     session = Session(
         user_id=None, # Skipping user link for now to prevent FK errors
@@ -34,6 +41,24 @@ async def start_session(
         "session_id": str(session.id),
         "question": session.questions[0]
     }
+
+@router.post("/upload-resume")
+async def upload_resume(file: UploadFile = File(...)):
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+    
+    content = await file.read()
+    text = ""
+    try:
+        doc = fitz.open(stream=content, filetype="pdf")
+        for page in doc:
+            text += page.get_text()
+        doc.close()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to parse PDF")
+        
+    return {"text": text.strip()}
+
 
 @router.post("/evaluate")
 async def evaluate_answer(

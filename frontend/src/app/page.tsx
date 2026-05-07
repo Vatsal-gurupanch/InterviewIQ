@@ -30,7 +30,7 @@ export default function Home() {
             <BrainCircuit className="text-white w-6 h-6" />
           </div>
           <span className="text-2xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
-            IPC
+            InterviewIQ
           </span>
         </div>
         <nav className="flex items-center gap-4">

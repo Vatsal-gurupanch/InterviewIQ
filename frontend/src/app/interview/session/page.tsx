@@ -6,7 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Mic, Square, Send, BrainCircuit, CheckCircle, AlertTriangle, ArrowRight, Trophy } from "lucide-react";
 import { Suspense, useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 
 // Extend Window interface for SpeechRecognition
 declare global {
@@ -31,17 +31,19 @@ function SessionContent() {
   const [question, setQuestion] = useState("");
   const [isComplete, setIsComplete] = useState(false);
   const [sessionReport, setSessionReport] = useState<any>(null);
+  const [timeLeft, setTimeLeft] = useState(100);
+  const router = useRouter();
 
   const recognitionRef = useRef<any>(null);
 
+  // Load initial question from session storage ONCE on mount
   useEffect(() => {
-    // Load initial question from session storage
     if (sessionId) {
       const q = sessionStorage.getItem(`session_q_${sessionId}`);
       if (q) setQuestion(q);
     }
 
-    // Setup Speech Recognition
+    // Setup Speech Recognition once
     if (typeof window !== "undefined") {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SpeechRecognition) {
@@ -54,20 +56,28 @@ function SessionContent() {
           for (let i = event.resultIndex; i < event.results.length; ++i) {
             currentTranscript += event.results[i][0].transcript;
           }
-          setAnswer(prev => {
-            // Very simple approach: append to previous if it's a final result,
-            // or just replace it. A full robust implementation would manage interim states.
-            // For this MVP, we just take the full transcript text.
-            return currentTranscript;
-          });
+          setAnswer(() => currentTranscript);
         };
       }
     }
-    
+
     return () => {
       if (recognitionRef.current) recognitionRef.current.stop();
     };
-  }, [sessionId]);
+  }, [sessionId]); // Only run once when sessionId is available
+
+  // Separate effect for the timer — depends on state changes
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 0) return 0;
+        if (isEvaluating || isComplete || feedback) return prev; // pause timer
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isEvaluating, isComplete, feedback]);
 
   const toggleRecording = () => {
     if (recording) {
@@ -115,11 +125,14 @@ function SessionContent() {
       setQuestionIndex(prev => prev + 1);
       setAnswer("");
       setFeedback(null);
+      setTimeLeft(100);
     }
   };
 
   if (isComplete && sessionReport) {
-    const avgScore = (sessionReport.scores.reduce((a:number, b:number) => a + b, 0) / sessionReport.scores.length).toFixed(1);
+    const avgScore = sessionReport.scores?.length > 0 
+      ? (sessionReport.scores.reduce((a:number, b:number) => a + b, 0) / sessionReport.scores.length).toFixed(1)
+      : "0.0";
     return (
       <div className="min-h-screen bg-[#0A0A0A] text-white flex flex-col items-center justify-center p-6">
         <div className="absolute top-0 w-1/2 h-1/2 bg-emerald-600/20 blur-[150px] rounded-full pointer-events-none" />
@@ -140,7 +153,7 @@ function SessionContent() {
                 <div className="text-xl font-medium text-indigo-300 mt-2">{sessionReport.role}</div>
               </div>
             </div>
-            <Button className="mt-8 bg-indigo-600 hover:bg-indigo-700 h-12 px-8 rounded-full" onClick={() => window.location.href = '/dashboard'}>
+            <Button className="mt-8 bg-indigo-600 hover:bg-indigo-700 h-12 px-8 rounded-full" onClick={() => router.push('/dashboard')}>
               Return to Dashboard
             </Button>
           </CardContent>
@@ -156,8 +169,13 @@ function SessionContent() {
           <BrainCircuit className="text-indigo-400 w-6 h-6" />
           <span className="font-bold">Active Session</span>
         </div>
-        <div className="text-sm font-mono text-gray-400 bg-white/5 px-3 py-1 rounded-full">
-          Question {questionIndex} of 5
+        <div className="flex items-center gap-4">
+          <div className={`text-sm font-bold px-3 py-1 rounded-full ${timeLeft <= 10 ? 'bg-red-500/20 text-red-400 animate-pulse' : 'bg-white/5 text-gray-300'}`}>
+            01:{timeLeft.toString().padStart(2, '0')}
+          </div>
+          <div className="text-sm font-mono text-gray-400 bg-white/5 px-3 py-1 rounded-full">
+            Question {questionIndex} of 5
+          </div>
         </div>
       </header>
 
@@ -233,15 +251,15 @@ function SessionContent() {
                 <div className="flex justify-between items-center">
                   <h2 className="text-2xl font-bold">Evaluation</h2>
                   <div className="flex items-center gap-2 bg-indigo-500/20 text-indigo-300 px-4 py-1.5 rounded-full text-sm font-bold border border-indigo-500/30">
-                    Overall: {feedback.evaluation.overall}/10
+                    Overall: {feedback?.evaluation?.overall || 0}/10
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">
                   {[
-                    { label: "Clarity", val: feedback.evaluation.scores?.clarity || 0, color: "bg-blue-500" },
-                    { label: "Relevance", val: feedback.evaluation.scores?.relevance || 0, color: "bg-emerald-500" },
-                    { label: "Depth", val: feedback.evaluation.scores?.depth || 0, color: "bg-purple-500" },
+                    { label: "Clarity", val: feedback?.evaluation?.scores?.clarity || 0, color: "bg-blue-500" },
+                    { label: "Relevance", val: feedback?.evaluation?.scores?.relevance || 0, color: "bg-emerald-500" },
+                    { label: "Depth", val: feedback?.evaluation?.scores?.depth || 0, color: "bg-purple-500" },
                   ].map((s, i) => (
                     <Card key={i} className="bg-white/5 border-white/10 text-white">
                       <CardContent className="p-4 text-center">
@@ -267,7 +285,7 @@ function SessionContent() {
                       </CardHeader>
                       <CardContent className="p-4 pt-0 text-gray-300 text-sm">
                         <ul className="list-disc pl-5 space-y-1">
-                          {(feedback.evaluation.strengths || []).map((s: string, i: number) => <li key={i}>{s}</li>)}
+                          {(feedback?.evaluation?.strengths || []).map((s: string, i: number) => <li key={i}>{s}</li>)}
                         </ul>
                       </CardContent>
                     </Card>
@@ -278,7 +296,7 @@ function SessionContent() {
                       </CardHeader>
                       <CardContent className="p-4 pt-0 text-gray-300 text-sm">
                         <ul className="list-disc pl-5 space-y-1">
-                          {(feedback.evaluation.improvements || []).map((s: string, i: number) => <li key={i}>{s}</li>)}
+                          {(feedback?.evaluation?.improvements || []).map((s: string, i: number) => <li key={i}>{s}</li>)}
                         </ul>
                       </CardContent>
                     </Card>
