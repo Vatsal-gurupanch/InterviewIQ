@@ -107,6 +107,11 @@ function SessionContent() {
       });
       const data = await res.json();
       
+      if (!res.ok) {
+        alert(data.detail || "An error occurred while evaluating your answer.");
+        return;
+      }
+      
       setFeedback(data);
       if (data.is_complete) {
         setIsComplete(true);
@@ -114,6 +119,7 @@ function SessionContent() {
       }
     } catch (err) {
       console.error(err);
+      alert("Failed to connect to the backend server.");
     } finally {
       setIsEvaluating(false);
     }

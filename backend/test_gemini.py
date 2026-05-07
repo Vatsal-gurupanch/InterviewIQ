@@ -1,13 +1,16 @@
 import asyncio
-from app.services.gemini_service import generate_question
+import json
+from app.services import gemini_service
+from app.services import nlp_service
 
-def main():
-    print("Testing generate_question...")
-    res = generate_question(role="Frontend Developer", mode="technical", history=[])
-    print("Result 1:", res)
-    
-    res2 = generate_question(role="Frontend Developer", mode="technical", history=[{"q": "Q1", "a": "A1"}])
-    print("Result 2:", res2)
+def test():
+    try:
+        metrics = nlp_service.run_nlp_pipeline("I used python and sql to build a cool app.", "")
+        res = gemini_service.evaluate_answer("What is your experience?", "I used python and sql to build a cool app.", metrics)
+        print("Success:")
+        print(res)
+    except Exception as e:
+        print(f"Exception: {type(e).__name__}: {e}")
 
 if __name__ == "__main__":
-    main()
+    test()

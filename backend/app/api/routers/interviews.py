@@ -60,24 +60,37 @@ async def upload_resume(file: UploadFile = File(...)):
     return {"text": text.strip()}
 
 
+from beanie import PydanticObjectId
+
 @router.post("/evaluate")
 async def evaluate_answer(
     session_id: str = Body(...),
     user_answer: str = Body(...),
     token: str = Depends(get_current_user)
 ):
-    session = await Session.get(session_id)
+    try:
+        obj_id = PydanticObjectId(session_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+        
+    session = await Session.get(obj_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
         
     current_question = session.questions[-1]
     nlp_metrics = nlp_service.run_nlp_pipeline(answer=user_answer, ideal_answer="")
     
-    evaluation = gemini_service.evaluate_answer(
-        question=current_question,
-        user_answer=user_answer,
-        nlp_metrics=nlp_metrics
-    )
+    try:
+        evaluation = gemini_service.evaluate_answer(
+            question=current_question,
+            user_answer=user_answer,
+            nlp_metrics=nlp_metrics
+        )
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "quota" in error_msg or "429" in error_msg or "exhausted" in error_msg:
+            raise HTTPException(status_code=429, detail="API rate limit exceeded. Please wait a minute before submitting.")
+        raise HTTPException(status_code=500, detail=f"Failed to evaluate answer: {str(e)}")
     
     session.answers.append(user_answer)
     session.scores.append(evaluation.get("overall", 0))
@@ -87,8 +100,14 @@ async def evaluate_answer(
     
     if not is_complete:
         history = [{"q": q, "a": a} for q, a in zip(session.questions, session.answers)]
-        q_data = gemini_service.generate_question(role=session.role, mode=session.mode, history=history)
-        next_question = q_data.get("question", "What is your greatest strength?")
+        try:
+            q_data = gemini_service.generate_question(role=session.role, mode=session.mode, history=history)
+            next_question = q_data.get("question", "What is your greatest strength?")
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "quota" in error_msg or "429" in error_msg or "exhausted" in error_msg:
+                raise HTTPException(status_code=429, detail="API rate limit exceeded while generating next question.")
+            raise HTTPException(status_code=500, detail=f"Failed to generate next question: {str(e)}")
         session.questions.append(next_question)
         
     await session.save()

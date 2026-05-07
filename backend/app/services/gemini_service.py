@@ -5,7 +5,7 @@ from app.core.config import settings
 genai.configure(api_key=settings.GEMINI_API_KEY)
 
 # Use the pro model for better reasoning, or flash for speed
-model = genai.GenerativeModel('gemini-2.5-flash')
+model = genai.GenerativeModel('gemini-2.5-flash-lite')
 
 SYSTEM_PROMPT = """
 You are an expert interview preparation coach AI agent built into a web application. Your role is to help users prepare for job interviews through realistic practice sessions and detailed, actionable feedback.

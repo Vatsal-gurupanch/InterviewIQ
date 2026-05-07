@@ -58,6 +58,13 @@ export default function InterviewSetup() {
         body: JSON.stringify({ role, mode, resume_text: resumeText }),
       });
       const data = await res.json();
+      
+      if (!res.ok) {
+        alert(data.detail || "An error occurred while starting the session.");
+        setLoading(false);
+        return;
+      }
+      
       if (data.session_id) {
         // Redirect to the session with the question pre-loaded
         sessionStorage.setItem(`session_q_${data.session_id}`, data.question);
@@ -65,6 +72,7 @@ export default function InterviewSetup() {
       }
     } catch (err) {
       console.error(err);
+      alert("Failed to connect to the backend server.");
       setLoading(false);
     }
   };
